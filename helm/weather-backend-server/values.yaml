@@ -1,0 +1,18 @@
+replicaCount: 1
+
+image:
+  repository: docker.io/orik45/weather-backend-server
+  tag: latest
+  pullPolicy: IfNotPresent
+  containerPort: 5000
+
+nameOverride: ""
+fullnameOverride: "weather-backend-server"
+
+service:
+  type: ClusterIP
+  port: 5000
+
+env: {}
+
+resources: {}
