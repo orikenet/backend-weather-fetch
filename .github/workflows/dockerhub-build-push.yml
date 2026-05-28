@@ -63,3 +63,49 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Update Central Helm Chart Tag (GitOps)
+        env:
+          HELM_REPO_PAT: ${{ secrets.HELM_REPO_PAT }}
+        run: |
+          if [ -z "$HELM_REPO_PAT" ]; then
+            echo "::warning::Missing HELM_REPO_PAT secret. Skipping GitOps update of central Helm chart."
+            exit 0
+          fi
+
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            VALUES_FILE="values-main.yaml"
+          elif [ "${{ github.ref_name }}" = "dev" ]; then
+            VALUES_FILE="values-dev.yaml"
+          else
+            echo "Not running on main or dev branch. Skipping GitOps update."
+            exit 0
+          fi
+
+          # Obtain the short SHA of the current commit
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          NEW_TAG="sha-${SHORT_SHA}"
+
+          echo "Updating central Helm chart image tag to ${NEW_TAG} in ${VALUES_FILE}"
+
+          # Setup Git
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+          # Clone central Helm repository
+          git clone https://${HELM_REPO_PAT}@github.com/${{ github.repository_owner }}/HelmChartsFinalProject.git central-helm
+          cd central-helm
+
+          TARGET_FILE="${{ env.IMAGE_NAME }}/${VALUES_FILE}"
+
+          if [ -f "$TARGET_FILE" ]; then
+            # Update the image tag line under the image: section
+            sed -i -E '/image:/,/tag:/ { s/(tag:\s*).*/\1'"$NEW_TAG"'/ }' "$TARGET_FILE"
+            
+            git add "$TARGET_FILE"
+            git commit -m "chore(gitops): update ${{ env.IMAGE_NAME }} tag to ${NEW_TAG} [skip ci]"
+            git push origin main
+          else
+            echo "Error: Target values file ${TARGET_FILE} not found in central repository."
+            exit 1
+          fi
